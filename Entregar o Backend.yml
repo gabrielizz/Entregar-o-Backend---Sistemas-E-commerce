@@ -1,0 +1,190 @@
+/*
+* Curso de Engenharia de Software - UniEVANGÉLICA
+* Disciplina de Programação Web
+* Dev: Gabriel g . MESQUITA
+* DATA
+*/
+backend/
+│
+├── app/
+│   ├── __init__.py
+│   ├── config.py
+│   ├── routes/
+│   │   ├── __init__.py
+│   │   ├── user_routes.py
+│   │   ├── product_routes.py
+│   │   ├── order_routes.py
+│   ├── controllers/
+│   │   ├── __init__.py
+│   │   ├── user_controller.py
+│   │   ├── product_controller.py
+│   │   ├── order_controller.py
+│   ├── services/
+│   │   ├── __init__.py
+│   │   ├── user_service.py
+│   │   ├── product_service.py
+│   │   ├── order_service.py
+│   ├── repositories/
+│   │   ├── __init__.py
+│   │   ├── user_repository.py
+│   │   ├── product_repository.py
+│   │   ├── order_repository.py
+│   ├── models/
+│   │   ├── __init__.py
+│   │   ├── user.py
+│   │   ├── product.py
+│   │   ├── order.py
+│   └── db.py
+├── run.py
+└── requirements.txt
+
+from app import create_app
+
+app = create_app()
+
+if __name__ == "__main__":
+    app.run(debug=True)
+
+//app/__init__.py
+from flask import Flask
+from app.db import init_db
+
+def create_app():
+    app = Flask(__name__)
+    app.config.from_object('app.config.Config')
+
+    # Initialize database
+    init_db(app)
+
+    # Register blueprints
+    from app.routes import user_routes, product_routes, order_routes
+    app.register_blueprint(user_routes.bp)
+    app.register_blueprint(product_routes.bp)
+    app.register_blueprint(order_routes.bp)
+
+    return app
+
+    app/config.py
+    import os
+
+class Config:
+    SECRET_KEY = os.environ.get('SECRET_KEY') or 'you-will-never-guess'
+    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or 'sqlite:///app.db'
+    SQLALCHEMY_TRACK_MODIFICATIONS = False
+
+app/db.py
+from flask_sqlalchemy import SQLAlchemy
+
+db = SQLAlchemy()
+
+def init_db(app):
+    db.init_app(app)
+    with app.app_context():
+        db.create_all()
+
+app/models/user.py
+
+from app.db import db
+
+class User(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(80), unique=True, nullable=False)
+    password = db.Column(db.String(120), nullable=False)
+    email = db.Column(db.String(120), unique=True, nullable=False)
+
+    def __repr__(self):
+        return f'<User {self.username}>'
+
+app/models/product.py
+
+from app.db import db
+
+class Product(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(80), nullable=False)
+    description = db.Column(db.String(200), nullable=True)
+    price = db.Column(db.Float, nullable=False)
+
+    def __repr__(self):
+        return f'<Product {self.name}>'
+
+        app/models/order.py
+python
+
+from app.db import db
+
+class Order(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    product_id = db.Column(db.Integer, db.ForeignKey('product.id'), nullable=False)
+    quantity = db.Column(db.Integer, nullable=False)
+
+    def __repr__(self):
+        return f'<Order {self.id}>'
+
+app/routes/user_routes.py
+
+from flask import Blueprint, request, jsonify
+from app.controllers import user_controller
+
+bp = Blueprint('user', __name__, url_prefix='/users')
+
+@bp.route('/', methods=['GET'])
+def get_users():
+    return user_controller.get_users()
+
+@bp.route('/<int:id>', methods=['GET'])
+def get_user(id):
+    return user_controller.get_user(id)
+
+@bp.route('/', methods=['POST'])
+def create_user():
+    data = request.get_json()
+    return user_controller.create_user(data)
+
+app/controllers/user_controller.py
+from app.services import user_service
+
+def get_users():
+    users = user_service.get_all_users()
+    return jsonify([user.to_dict() for user in users])
+
+def get_user(user_id):
+    user = user_service.get_user_by_id(user_id)
+    if user:
+        return jsonify(user.to_dict())
+    return {'error': 'User not found'}, 404
+
+def create_user(data):
+    user = user_service.create_user(data)
+    return jsonify(user.to_dict()), 201
+
+    app/services/user_service.py
+    from app.repositories import user_repository
+from app.models.user import User
+
+def get_all_users():
+    return user_repository.get_all()
+
+def get_user_by_id(user_id):
+    return user_repository.get_by_id(user_id)
+
+def create_user(data):
+    user = User(username=data['username'], password=data['password'], email=data['email'])
+    return user_repository.save(user)
+
+    app/repositories/user_repository.py
+
+    from app.db import db
+from app.models.user import User
+
+def get_all():
+    return User.query.all()
+
+def get_by_id(user_id):
+    return User.query.get(user_id)
+
+def save(user):
+    db.session.add(user)
+    db.session.commit()
+    return user
